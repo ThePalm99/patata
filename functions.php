@@ -58,9 +58,8 @@ function print_stats(string $stats)
 
     $curl = get_curl();
 
-    echo '<div class="row" id="stats">';
-    print_stat($curl,'cpu');
-    print_stat($curl,'ram');
+    echo '<div class="row" id="stats" style="overflow: hidden; height: 100%;">';
+    print_stat($curl, 'tasks');
     echo '</div>';
 
     curl_close($curl);
@@ -112,7 +111,7 @@ function print_social_stat($case)
         case 'facebook':
             $url = 'https://graph.facebook.com/' . FACEBOOK_PAGE_ID . '/?fields=fan_count&access_token=' . FACEBOOK_ACCESS_TOKEN;
             if (file_exists(FACEBOOK_CACHE)){
-                $result = json_decode(file_get_contents(INSTAGRAM_CACHE), true);
+                $result = json_decode(file_get_contents(FACEBOOK_CACHE), true);
                 if(time() - filemtime(FACEBOOK_CACHE) <= FACEBOOK_CACHE_LIFETIME) {
                     $result = write_cache($url, FACEBOOK_CACHE);
                 }
@@ -208,26 +207,6 @@ function get_curl()
 }
 
 
-function get_social_curl(){
-    $curl = curl_init();
-    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($curl, CURLOPT_HTTPHEADER, [
-        'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0',
-        'Accept: */*',
-        'Accept-Language: it-IT,it;q=0.8,en-US;q=0.5,en;q=0.3',
-        'Authorization: Basic ZnJvbnRlbmQ6bmFpeDZlaU0=',
-        'Origin: https://instastatistics.com',
-        'Referer: https://instastatistics.com/',
-        'Sec-Fetch-Dest: empty',
-        'Sec-Fetch-Mode: cors',
-        'Sec-Fetch-Site: cross-site',
-        'TE: trailers',
-    ]);
-
-    return $curl;
-}
-
-
 function download_tasks(): array
 {
     // TODO: use etag/If-Modified-Since instead
@@ -271,7 +250,10 @@ function print_tasktable()
     $tasks = [];
 
     foreach($stacks as $stack) {
-        // TODO: parse it all...
+        // skip if empty stack
+        if (!isset($stack['cards'])){
+            continue;
+        }
         $cards = $stack['cards'];
         $timezone = new DateTimeZone('Europe/Rome');
         foreach ($cards as $card){
@@ -360,73 +342,101 @@ function print_tasktable()
 function print_stat($curl, string $stat)
 {
     switch ($stat) {
-        case 'cpu':
-            $urls = ['Intel' => '/v2/stats/getCountByFeature/cpu-socket/brand=Intel/box12',
-                'AMD' => '/v2/stats/getCountByFeature/cpu-socket/brand=AMD/box12'];
-            $title = 'CPUs available';
+        case 'tasks':
+            $title = 'Task count';
+            $query = json_decode(file_get_contents(TASKS_CACHE), true);
+            $data = [];
+            foreach ($query as $stack){
+                // skip empty stacks
+                if (!isset($stack['cards'])){
+                    continue;
+                }
+                $cards = $stack['cards'];
+                foreach ($cards as $card){
+                    $labels = $card['labels'];
+                    foreach ($labels as $label){
+                        if (isset($data[$label['title']])){
+                            $data[$label['title']] += 1;
+                        } else {
+                            $data[$label['title']] = 1;
+                        }
+                    }
+                }
+            }
             break;
         case 'ram':
             $url = '/v2/stats/getCountByFeature/ram-type/working=yes/rambox';
             $title = 'RAMs available';
             break;
-        case 'latest_mod':
-            $url = '/v2/stats/getRecentAuditByType/U/5';
-            $title = 'Recently modified items';
-            break;
-        case 'latest_creation':
-            $url = '/v2/stats/getRecentAuditByType/C/5';
-            $title = 'Recently modified items';
+        case 'latest':
+            $urls = ['/v2/stats/getRecentAuditByType/U/5',
+                '/v2/stats/getRecentAuditByType/C/5'];
+            $title = 'Recent items';
             break;
         default:
             echo 'print_stat error: no such case.';
     }
 
-    if ($title == 'CPUs available'){
-        $data = [];
-        $data['Intel'] = get_data_from_tarallo($curl, $urls['Intel']);
-        $data['AMD'] = get_data_from_tarallo($curl, $urls['AMD']);
-    } else {
-        $datas = get_data_from_tarallo($curl, $url);
-        $data = [];
-        foreach ($datas as $key => $entry) {
-            $data[strtoupper($key)] = $entry;
-        }
-    }
     ?>
-    <div class='col-md-6'>
-        <h6 class='text-center'><?= e($title) ?></h6>
-        <table class='table table-striped table-sm text-center'>
-            <thead style="position: sticky; top: 0;">
-            <tr>
-
-                <?php if ($title == 'CPUs available'): ?>
-                    <th>Brand</th>
-                    <th>Socket</th>
-                <?php else: ?>
-                    <th>Type</th>
-                <?php endif; ?>
-                <th>Qty</th>
-            </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($data as $key => $array): ?>
-            <?php if ($title == 'CPUs available'): ?>
-            <?php foreach ($array as $entry_key => $entry): ?>
+    <div class='col-md-6' style="overflow: hidden; height: 100%;">
+        <div id="<?= $stat ?>_header">
+            <?php if ($stat != 'tasks'): ?>
+            <h6 class='text-center'><?= e($title) ?></h6>
+            <?php endif; ?>
+            <table class='m-0 table table-striped table-sm text-center'>
+                <thead style="position: sticky; top: 0;">
                 <tr>
-                    <td><?= e($key) ?></td>
-                    <td><?= e($entry_key) ?></td>
-                    <td><?= e($entry) ?></td>
+                    <?php if ($stat == 'tasks'): ?>
+                        <th id="<?= $stat ?>_first_head">Task tag</th>
+                    <?php else: ?>
+                        <th id="<?= $stat ?>_first_head">Type</th>
+                    <?php endif; ?>
+                    <th id="<?= $stat ?>_second_head">Qty</th>
                 </tr>
-            <?php endforeach;?>
-            <?php else: ?>
+                </thead>
+            </table>
+        </div>
+        <div id="<?= $stat ?>_table" style="overflow: hidden;  height: 100%;">
+            <table class='m-0 table table-striped table-sm text-center' id="<?= $stat ?>">
+                <tbody>
+                <?php foreach ($data as $key => $entry): ?>
                     <tr>
                         <td><?= e($key) ?></td>
-                        <td><?= e($array) ?></td>
+                        <td><?= e($entry) ?></td>
                     </tr>
-            <?php endif; ?>
-            <?php endforeach;?>
-            </tbody>
-        </table>
+                <?php endforeach;?>
+                </tbody>
+            </table>
+        </div>
     </div>
+
+    <!--suppress InfiniteLoopJS -->
+    <script type='text/javascript'>
+
+        (async function autoscroll() {
+            let table = document.getElementById('<?= $stat ?>_table');
+            let firstHeader = document.getElementById('<?= $stat ?>_first_head')
+            let secondHeader = document.getElementById('<?= $stat ?>_second_head')
+
+            // // Set correct table header width
+            firstHeader.style.width = table.rows[0].cells[0].offsetWidth + "px";
+            assigneeHeader.style.width = table.rows[0].cells[1].offsetWidth + "px";
+            //Define tasktable autoscroll function
+
+            let $tablediv = $('#<?= $stat ?>_table');
+
+            let velocity = 20;
+            let tableHeight = table.clientHeight;
+            let duration = tableHeight * velocity;
+            while(true) {
+                await $tablediv.animate({scrollTop: 0}, 800).promise();
+                await $tablediv.animate({scrollTop: 0}, 2000).promise();
+                await $tablediv.animate({scrollTop: tableHeight}, duration, "linear").promise();
+                console.log(tableHeight);
+            }
+        })();
+
+        </script>
+
     <?php
 }

@@ -172,9 +172,6 @@ exit(0);
 
         <!--suppress InfiniteLoopJS -->
         <script type='text/javascript'>
-            let interval = 60 * 60;
-            let $tasktablediv = $('#tasktablediv');
-            let tasktable =  document.getElementById('tasktable');
             let taskHeader = document.getElementById('taskHead');
             let assigneeHeader = document.getElementById('assigneeHead');
             let tasktable_table = document.getElementById('tasktable_table');
@@ -188,6 +185,8 @@ exit(0);
                 let count = 0;
                 let velocity = 30;
                 let scroll_to_update = 10;
+                let $tasktablediv = $('#tasktablediv');
+                let tasktable =  document.getElementById('tasktable');
                 let tableHeight = tasktable.clientHeight;
                 let duration = tableHeight * velocity;
                 while(true) {
