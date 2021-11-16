@@ -23,7 +23,12 @@ const TYPE_DESCRIPTION = [
     'R' => 'Retrocomputing',
     'S' => 'Svago',
 ];
-const CACHE_FILE = 'stacks_cache.json';
+const TASKS_CACHE = 'stacks_cache.json';
+const TASKS_CACHE_LIFETIME = 3600 * 1;
+const INSTAGRAM_CACHE = 'cache_instagram.json';
+const INSTAGRAM_CACHE_LIFETIME = 3600 * 24;
+const FACEBOOK_CACHE = 'cache_facebook.json';
+const FACEBOOK_CACHE_LIFETIME = INSTAGRAM_CACHE_LIFETIME;
 
 
 function deck_request(string $url): string {
@@ -106,26 +111,49 @@ function print_social_stat($case)
             break;
         case 'facebook':
             $url = 'https://graph.facebook.com/' . FACEBOOK_PAGE_ID . '/?fields=fan_count&access_token=' . FACEBOOK_ACCESS_TOKEN;
-            $result = file_get_contents($url);
-            $result = json_decode($result, true);
+            if (file_exists(FACEBOOK_CACHE)){
+                $result = json_decode(file_get_contents(INSTAGRAM_CACHE), true);
+                if(time() - filemtime(FACEBOOK_CACHE) <= FACEBOOK_CACHE_LIFETIME) {
+                    $result = write_cache($url, FACEBOOK_CACHE);
+                }
+            } else {
+                $result = write_cache($url, FACEBOOK_CACHE);
+            }
             $result = '<div class="col-12 align-middle" style="display: inline;">'.
                 '<i class="fa fa-facebook-square" style="vertical-align: middle; font-size: 1.5rem; color: #3b5998;"></i>'.
                 '<span class="pl-1" style="font-size: 1rem; vertical-align: middle;">' .
                 $result['fan_count'] . '</span></div>';
             break;
         case 'instagram':
-            $url = 'https://api.evolve.social/instagram/realtime/weeeopen';
-            $curl = get_social_curl();
-            curl_setopt($curl, CURLOPT_URL, $url);
-            $result = curl_exec($curl);
-            $result = json_decode($result, true);
+            $url = 'https://www.instagram.com/'. INSTAGRAM_PAGE_ID . '/?__a=1';
+            if (file_exists(INSTAGRAM_CACHE)) {
+                $result = json_decode(file_get_contents(INSTAGRAM_CACHE), true);
+                if (time() - filemtime(INSTAGRAM_CACHE) >= INSTAGRAM_CACHE_LIFETIME) {
+                    $result = write_cache($url, INSTAGRAM_CACHE);
+                }
+            } else {
+                $result = write_cache($url, INSTAGRAM_CACHE);
+            }
             $result = '<div class="col-12 align-middle" style="display: inline;">'.
                 '<i class="fa fa-instagram instagram_icon" style="vertical-align: middle; font-size: 1.5rem; "></i>'.
-                '<span class="pl-1" style="font-size: 1rem; vertical-align: middle;">' .
-                $result['data']['followerCount'] . '</span></div>';
+                '<span class="pl-1" style="font-size: 1rem; vertical-align: middle;">'.
+                $result['graphql']['user']['edge_followed_by']['count'] . '</span></div>';
+
             break;
         default:
-            echo 'lol';
+            $result = 'BIG ERROR ASD';
+    }
+    return $result;
+}
+
+
+function write_cache($url, $cache_file){
+    $result = file_get_contents($url);
+    $result = json_decode($result, true);
+    if ($result != null){
+        file_put_contents($cache_file, json_encode($result));
+    } else if (file_exists($cache_file)){
+        $result = json_decode(file_get_contents($cache_file), true);
     }
     return $result;
 }
@@ -202,11 +230,10 @@ function get_social_curl(){
 
 function download_tasks(): array
 {
-    $cache_timeout = 60 * 60 * 1;
     // TODO: use etag/If-Modified-Since instead
-    if(file_exists(CACHE_FILE)) {
-        if(time() - filemtime(CACHE_FILE) <= $cache_timeout) { // 1 hour
-            return json_decode(file_get_contents(CACHE_FILE), true);
+    if(file_exists(TASKS_CACHE)) {
+        if(time() - filemtime(TASKS_CACHE) <= TASKS_CACHE_LIFETIME) { // 1 hour
+            return json_decode(file_get_contents(TASKS_CACHE), true);
         }
     }
 
@@ -221,7 +248,7 @@ function download_tasks(): array
 
     unset($stacks_json);
 
-    file_put_contents(CACHE_FILE, json_encode($stacks_to_display));
+    file_put_contents(TASKS_CACHE, json_encode($stacks_to_display));
 
     return $stacks_to_display;
 }
